@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Usage Widget</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="vendor/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="panel">
+  <!-- Error / empty banners (shared across tabs, one shown at a time) -->
+  <div id="banner-error" class="banner banner-error" role="alert">
+    <span id="banner-error-text"></span>
+    <button id="banner-retry" class="retry hidden" type="button">再試行</button>
+  </div>
+  <div id="banner-empty" class="banner banner-empty">
+    この期間のデータはありません。
+  </div>
+
+  <div class="tabs">
+    <button type="button" class="tab-button active" data-tab="breakdown">内訳分析</button>
+    <button type="button" class="tab-button" data-tab="comparison">比較</button>
+  </div>
+
+  <!-- Tab 1: 内訳分析 (breakdown) -->
+  <section id="tab-breakdown" class="tab-panel active">
+    <div class="controls">
+      <fieldset id="period-selector" data-scope="breakdown">
+        <legend>期間</legend>
+        <span class="period-option">
+          <label><input type="radio" name="period-breakdown" value="24h" /><span>24時間</span></label>
+        </span>
+        <span class="period-option">
+          <label><input type="radio" name="period-breakdown" value="7d" checked /><span>7日間</span></label>
+        </span>
+        <span class="period-option">
+          <label><input type="radio" name="period-breakdown" value="30d" /><span>30日間</span></label>
+        </span>
+      </fieldset>
+
+      <select id="dimension-select" class="dimension-select">
+        <option value="model">モデル別</option>
+        <option value="token_type">トークン種別別</option>
+        <option value="session">セッション別</option>
+      </select>
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="breakdown-pie"></canvas>
+    </div>
+    <p class="legend-note">パーセントは参考値です。実数は下表を参照してください。</p>
+
+    <div class="grand-total" id="breakdown-grand-total"></div>
+
+    <table class="data-table" id="breakdown-table">
+      <thead>
+        <tr>
+          <th>項目</th>
+          <th>input</th>
+          <th>output</th>
+          <th>cache作成</th>
+          <th>cache読取</th>
+          <th>reasoning</th>
+          <th>合計</th>
+          <th>コスト(USD)</th>
+        </tr>
+      </thead>
+      <tbody id="breakdown-table-body"></tbody>
+    </table>
+  </section>
+
+  <!-- Tab 2: 比較 (comparison) -->
+  <section id="tab-comparison" class="tab-panel">
+    <div class="controls">
+      <fieldset id="period-selector-comparison" data-scope="comparison">
+        <legend>期間</legend>
+        <span class="period-option">
+          <label><input type="radio" name="period-comparison" value="24h" /><span>24時間</span></label>
+        </span>
+        <span class="period-option">
+          <label><input type="radio" name="period-comparison" value="7d" checked /><span>7日間</span></label>
+        </span>
+        <span class="period-option">
+          <label><input type="radio" name="period-comparison" value="30d" /><span>30日間</span></label>
+        </span>
+      </fieldset>
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="comparison-bar"></canvas>
+    </div>
+  </section>
+
+  <div class="copy-area">
+    <button id="copy-json-btn" type="button">JSONとしてコピー</button>
+    <button id="copy-markdown-btn" type="button">Markdownとしてコピー</button>
+    <span id="copy-confirm" class="copy-confirm">コピーしました</span>
+  </div>
+</div>
+
+<script>
+  // Mock bridge for standalone/manual smoke-testing in a plain browser.
+  // Only activates when window.pywebview is absent at load time (real
+  // pywebview injects window.pywebview before this page is evaluated),
+  // so this block is inert once wired into the real app.
+  if (typeof window.pywebview === "undefined") {
+    (function installMockApi() {
+      function delay(value, ms) {
+        return new Promise(function (resolve) {
+          setTimeout(function () {
+            resolve(value);
+          }, ms || 60);
+        });
+      }
+
+      var MOCK_BREAKDOWN = {
+        dimension: "model",
+        period_label: "7日間",
+        slices: [
+          { label: "claude-3-5-sonnet", value: 8000, pct: 66.7 },
+          { label: "gpt-5-codex", value: 4000, pct: 33.3 }
+        ],
+        table: [
+          {
+            label: "claude-3-5-sonnet",
+            input: 5000,
+            output: 2500,
+            cache_creation: 300,
+            cache_read: 200,
+            reasoning: 0,
+            total: 8000,
+            cost_usd: 12.34
+          },
+          {
+            label: "gpt-5-codex",
+            input: 2000,
+            output: 1500,
+            cache_creation: 0,
+            cache_read: 0,
+            reasoning: 500,
+            total: 4000,
+            cost_usd: 5.67
+          }
+        ],
+        grand_total_tokens: 12000,
+        grand_total_cost: 18.01
+      };
+
+      var MOCK_EMPTY_BREAKDOWN = {
+        dimension: "model",
+        period_label: "24時間",
+        slices: [],
+        table: [],
+        grand_total_tokens: 0,
+        grand_total_cost: 0
+      };
+
+      var MOCK_COMPARISON = {
+        period_label: "7日間",
+        models: ["claude-3-5-sonnet", "gpt-5-codex"],
+        series: {
+          claude: [8000, 0],
+          codex: [0, 4000]
+        },
+        totals: { claude: 8000, codex: 4000 }
+      };
+
+      var params = new URLSearchParams(window.location.search);
+      var mockMode = params.get("mock") || "ok";
+
+      window.pywebview = {
+        api: {
+          get_status: function () {
+            return delay({
+              node: mockMode === "node_missing" ? "missing" : "ok",
+              message: mockMode === "node_missing" ? "Node.js/npx not found" : null,
+              poll_interval_s: 60,
+              last_refresh: null
+            });
+          },
+          get_breakdown: function (period, dimension, agent) {
+            console.log("[mock] get_breakdown", period, dimension, agent);
+            if (mockMode === "node_missing") {
+              return delay({ error: "node_missing", message: "Node.js/npx not found" });
+            }
+            if (mockMode === "timeout") {
+              return delay({ error: "ccusage_timeout", message: "ccusage timed out after 60s" });
+            }
+            if (mockMode === "failed") {
+              return delay({ error: "ccusage_failed", message: "ccusage exited with status 1: some stderr tail" });
+            }
+            if (mockMode === "empty") {
+              return delay(Object.assign({}, MOCK_EMPTY_BREAKDOWN, { dimension: dimension }));
+            }
+            return delay(Object.assign({}, MOCK_BREAKDOWN, { dimension: dimension }));
+          },
+          get_comparison: function (period) {
+            console.log("[mock] get_comparison", period);
+            if (mockMode === "node_missing") {
+              return delay({ error: "node_missing", message: "Node.js/npx not found" });
+            }
+            if (mockMode === "empty") {
+              return delay({
+                period_label: "24時間",
+                models: [],
+                series: { claude: [], codex: [] },
+                totals: { claude: 0, codex: 0 }
+              });
+            }
+            return delay(MOCK_COMPARISON);
+          },
+          copy_json: function () {
+            return delay({ ok: true });
+          },
+          copy_markdown: function () {
+            return delay({ ok: true });
+          },
+          get_config: function () {
+            return delay({ poll_interval_s: 60, default_period: "7d", timezone: null });
+          },
+          set_config: function (patch) {
+            return delay(patch);
+          }
+        }
+      };
+    })();
+  }
+</script>
+<script src="app.js"></script>
+</body>
+</html>
