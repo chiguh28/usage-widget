@@ -1,0 +1,26 @@
+[project]
+name = "usage-widget"
+version = "0.1.0"
+description = "Local desktop tray widget visualizing Claude Code + Codex CLI token usage via ccusage."
+requires-python = ">=3.10"
+dependencies = [
+    "pystray",
+    "pywebview",
+    "pyperclip",
+    "tzlocal",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["backend*", "app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

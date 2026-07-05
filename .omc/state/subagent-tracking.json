@@ -1,0 +1,26 @@
+{
+  "agents": [
+    {
+      "agent_id": "a2193da411f5d4372",
+      "agent_type": "senior-architect",
+      "started_at": "2026-07-05T02:16:07.307Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-05T02:32:27.093Z",
+      "duration_ms": 979786
+    },
+    {
+      "agent_id": "a1d598065a373e544",
+      "agent_type": "implementer",
+      "started_at": "2026-07-05T02:36:19.549Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-05T02:39:11.796Z",
+      "duration_ms": 172247
+    }
+  ],
+  "total_spawned": 2,
+  "total_completed": 18,
+  "total_failed": 0,
+  "last_updated": "2026-07-05T02:39:12.776Z"
+}
