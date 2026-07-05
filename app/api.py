@@ -2,10 +2,12 @@
 
 `Api` orchestrates the backend pipeline (client -> normalize -> aggregate ->
 export) and config load/save. It holds NO business logic itself and NEVER
-lets a backend exception propagate across the bridge -- pywebview would
-otherwise hang/break the UI on an uncaught Python exception, so every public
-method catches backend.errors.CcusageError (and subclasses) and returns
-{"error": code, "message": str(exc)} instead.
+lets ANY exception propagate across the bridge -- pywebview would otherwise
+hang/break the UI on an uncaught Python exception. Every public method
+catches backend.errors.CcusageError (and subclasses) and returns
+{"error": code, "message": str(exc)} instead; bad period/dimension enums
+(ValueError) map to {"error": "bad_request", ...}; get_status degrades to
+DEFAULT_CONFIG values if the on-disk config can't be read.
 """
 from __future__ import annotations
 
@@ -76,7 +78,13 @@ class Api:
         status = self._client.check_node_available()
         node = "ok" if status == NodeStatus.OK else "missing"
         message = None if node == "ok" else "Node.js/npx not found"
-        config = config_module.load_config()
+        try:
+            config = config_module.load_config()
+        except Exception:
+            # config.load_config() can raise OSError / json.JSONDecodeError on
+            # a corrupt or unreadable config.json -- the bridge NEVER raises
+            # across to JS (design section 5.6), so degrade to defaults.
+            config = dict(config_module.DEFAULT_CONFIG)
         return {
             "node": node,
             "message": message,
@@ -115,6 +123,9 @@ class Api:
             return vm
         except CcusageError as exc:
             return {"error": _error_code_for(exc), "message": str(exc)}
+        except ValueError as exc:
+            # bad period / dimension enum -- never raise across the bridge.
+            return {"error": "bad_request", "message": str(exc)}
 
     def get_comparison(self, period: str) -> dict:
         try:
@@ -127,6 +138,9 @@ class Api:
             return vm
         except CcusageError as exc:
             return {"error": _error_code_for(exc), "message": str(exc)}
+        except ValueError as exc:
+            # bad period enum -- never raise across the bridge.
+            return {"error": "bad_request", "message": str(exc)}
 
     # -- copy to clipboard ---------------------------------------------------
 

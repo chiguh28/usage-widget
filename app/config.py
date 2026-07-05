@@ -38,7 +38,15 @@ def _config_path() -> Path:
 
 
 def load_config() -> dict:
-    """Load the config, creating the dir/file with defaults if missing."""
+    """Load the config, creating the dir/file with defaults if missing.
+
+    Defense in depth: a corrupt (non-JSON) config.json falls back to
+    DEFAULT_CONFIG rather than raising, so a hand-edited/corrupted file on
+    disk can't crash a caller. Actual I/O errors (permissions, missing
+    drive, etc.) still raise -- callers across the pywebview bridge (see
+    app.api.Api.get_status) are responsible for the final degrade-gracefully
+    catch per design section 5.6.
+    """
     path = _config_path()
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,7 +56,10 @@ def load_config() -> dict:
         return dict(DEFAULT_CONFIG)
 
     with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            return dict(DEFAULT_CONFIG)
 
     merged = dict(DEFAULT_CONFIG)
     merged.update(data)

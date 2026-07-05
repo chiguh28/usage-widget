@@ -22,6 +22,19 @@ from backend.errors import NodeStatus
 
 
 # ---------------------------------------------------------------------------
+# Module-level config isolation -- EVERY test in this module that can reach
+# app.config.load_config()/save_config() must be isolated from the real
+# %APPDATA%/usage-widget/config.json (review Major-2). Class-scoped fixtures
+# alone missed TestGetStatus, which leaked a real file onto this machine.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module, "_config_dir", lambda: tmp_path / "usage-widget")
+
+
+# ---------------------------------------------------------------------------
 # Fake client
 # ---------------------------------------------------------------------------
 
@@ -125,6 +138,38 @@ class TestGetStatus:
         status = api.get_status()
 
         assert status["node"] == "missing"
+
+    def test_corrupt_config_degrades_gracefully(self, monkeypatch):
+        """A corrupt/unreadable config.json must not raise across the bridge
+        (design section 5.6) -- get_status should degrade to defaults."""
+        import app.api as api_module
+
+        def _broken_load_config():
+            raise json.JSONDecodeError("bad json", "doc", 0)
+
+        monkeypatch.setattr(api_module.config_module, "load_config", _broken_load_config)
+        client = FakeClient(node_status=NodeStatus.OK)
+        api = Api(client=client)
+
+        status = api.get_status()
+
+        assert status["node"] == "ok"
+        assert status["poll_interval_s"] == config_module.DEFAULT_CONFIG["poll_interval_s"]
+
+    def test_config_io_error_degrades_gracefully(self, monkeypatch):
+        import app.api as api_module
+
+        def _broken_load_config():
+            raise OSError("disk error")
+
+        monkeypatch.setattr(api_module.config_module, "load_config", _broken_load_config)
+        client = FakeClient(node_status=NodeStatus.OK)
+        api = Api(client=client)
+
+        status = api.get_status()
+
+        assert status["node"] == "ok"
+        assert status["poll_interval_s"] == config_module.DEFAULT_CONFIG["poll_interval_s"]
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +363,33 @@ class TestErrorContract:
 
         assert result == {"error": "ccusage_parse", "message": "bad"}
 
+    def test_get_breakdown_unknown_period_returns_bad_request(self):
+        client = FakeClient(daily={"claude": {"daily": []}})
+        api = Api(client=client, clock=lambda: dt.date(2026, 7, 5))
+
+        result = api.get_breakdown("bogus-period", "model", "claude")
+
+        assert result["error"] == "bad_request"
+        assert "bogus-period" in result["message"]
+
+    def test_get_breakdown_unknown_dimension_returns_bad_request(self):
+        client = FakeClient(daily={"claude": {"daily": [_claude_day("2026-07-01")]}})
+        api = Api(client=client, clock=lambda: dt.date(2026, 7, 5))
+
+        result = api.get_breakdown("7d", "bogus-dimension", "claude")
+
+        assert result["error"] == "bad_request"
+        assert "bogus-dimension" in result["message"]
+
+    def test_get_comparison_unknown_period_returns_bad_request(self):
+        client = FakeClient(daily={"claude": {"daily": []}, "codex": {"daily": []}})
+        api = Api(client=client, clock=lambda: dt.date(2026, 7, 5))
+
+        result = api.get_comparison("bogus-period")
+
+        assert result["error"] == "bad_request"
+        assert "bogus-period" in result["message"]
+
 
 # ---------------------------------------------------------------------------
 # get_comparison
@@ -401,10 +473,6 @@ class TestCopyMarkdown:
 
 
 class TestConfigViaApi:
-    @pytest.fixture(autouse=True)
-    def _isolated_config_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(config_module, "_config_dir", lambda: tmp_path / "usage-widget")
-
     def test_get_config_returns_defaults_when_missing(self):
         client = FakeClient()
         api = Api(client=client)
@@ -429,10 +497,6 @@ class TestConfigViaApi:
 
 
 class TestConfigModule:
-    @pytest.fixture(autouse=True)
-    def _isolated_config_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(config_module, "_config_dir", lambda: tmp_path / "usage-widget")
-
     def test_load_config_creates_defaults_when_missing(self, tmp_path):
         cfg = config_module.load_config()
 
@@ -458,3 +522,12 @@ class TestConfigModule:
             "default_period": "7d",
             "timezone": "Asia/Tokyo",
         }
+
+    def test_load_config_falls_back_to_defaults_on_corrupt_json(self, tmp_path):
+        config_dir = tmp_path / "usage-widget"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.json").write_text("{ not valid json ]", encoding="utf-8")
+
+        cfg = config_module.load_config()
+
+        assert cfg == config_module.DEFAULT_CONFIG
