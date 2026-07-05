@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: TiDD ルール
+    url: https://github.com/chiguh28/tool-factory/blob/main/docs/ticket-workflow.md
+    about: "起票の前に TiDD ルール（Epic/Task・ライフサイクル・DoR/DoD）を確認。無起票の作業は禁止。"

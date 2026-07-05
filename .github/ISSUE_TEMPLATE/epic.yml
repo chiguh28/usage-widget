@@ -1,0 +1,56 @@
+name: "Epic (E)"
+description: "顧客要望・変更要求・不具合報告の1単位。PM が起票。"
+title: "[Epic] "
+labels: ["type:epic", "status:backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Epic = 「何を・なぜ・いつまでに」。** PM 所有。Ready にするには Architect が設計 + Task 分解を終えていること。
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 種別
+      options:
+        - feature
+        - change-request
+        - bug
+    validations:
+      required: true
+  - type: textarea
+    id: background
+    attributes:
+      label: ビジネス背景（なぜ）
+      description: この Epic が必要な理由・解決したい課題。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: ゴール = 検収条件 (Acceptance Criteria) + DoD
+      description: pass/fail が観測可能な形で。ここが Epic DoD の判定基準になる。
+    validations:
+      required: true
+  - type: dropdown
+    id: moscow
+    attributes:
+      label: MoSCoW 優先度
+      options:
+        - Must
+        - Should
+        - Could
+        - "Won't"
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 子 Task（分解後にチェックリストで追記）
+      description: "Architect が分解した Task を `- [ ] #<issue番号>` で列挙。閉じると進捗が自動集計される。"
+      value: |
+        - [ ] #
+  - type: input
+    id: links
+    attributes:
+      label: 関連リンク（ADR / RAID / 設計仕様）
+      description: "例: ADR-0006-tidd-overlay.md / RAID I-3"

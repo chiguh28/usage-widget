@@ -1,0 +1,59 @@
+name: "Task (T)"
+description: "Epic を分解した「開発できる状態」の最小単位。Architect が起票し Ready にする。"
+title: "[Task] "
+labels: ["type:task", "status:backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **1 Task = 1 目的。** 目的が2つになったら Task を2枚に割る。Ready の条件 = 実装者が追加判断ゼロで着手できること（DoR）。
+  - type: input
+    id: epic
+    attributes:
+      label: 親 Epic
+      description: "この Task が属する Epic の issue 番号。例: #12"
+    validations:
+      required: true
+  - type: input
+    id: objective
+    attributes:
+      label: 目的（一文）
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: 設計方針（技術アプローチ）
+      description: Architect が記載。どう作るかの方針。
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: 契約 (signatures / data_shapes / invariants)
+    validations:
+      required: true
+  - type: textarea
+    id: target_files
+    attributes:
+      label: target_files（範囲外は out_of_scope に明記）
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 検収条件（観測可能に）
+      description: 各条件に対応するテストが要る。無いものは ❌未実施 として明示。
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: test_requirements (framework / tests_first / run_command)
+    validations:
+      required: true
+  - type: input
+    id: deps
+    attributes:
+      label: 依存 Task（dependencies）
+      description: "全依存が Done かつ target_files 非重複なら並列可。例: #14, #15"
